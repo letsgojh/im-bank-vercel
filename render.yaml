@@ -1,0 +1,26 @@
+# Render Blueprint (Free 플랜). 대시보드에서 New → Blueprint로 이 레포를 연결하면 된다.
+# sync: false 항목은 연결할 때 대시보드에서 값을 직접 입력한다(레포에 비밀값을 두지 않음).
+services:
+  - type: web
+    name: im-bank-web
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: UPSTAGE_API_KEY
+        sync: false
+      - key: UPSTAGE_PROJECT_ID
+        sync: false
+      - key: UPSTAGE_AGENT_ID
+        sync: false
+      - key: UPSTAGE_CONFIG_ID
+        value: "7"
+      - key: DEMO_MODE
+        value: "false"
+      - key: APP_PASSWORD
+        sync: false

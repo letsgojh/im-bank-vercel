@@ -1,0 +1,16 @@
+# 비밀값 (API 키가 들어 있음)
+.env*.local
+.env
+implementation_plan.md
+
+# 빌드/의존성
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+.vercel/
+
+# 테스트용 PDF
+sample*.pdf
+*.log
