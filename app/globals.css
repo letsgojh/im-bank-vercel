@@ -1,16 +1,26 @@
 @import "tailwindcss";
 
+@theme {
+  --color-navy-950: #071a2f;
+  --color-navy-900: #0b2a4a;
+  --color-navy-800: #123a63;
+  --color-navy-700: #1c4c80;
+  --color-navy-100: #dfe7f1;
+  --color-navy-50: #f1f5f9;
+  --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+}
+
 :root {
   color-scheme: light;
 }
 
 body {
-  background: #f5f6f8;
-  color: #111827;
-  font-family: var(--font-sans-kr), "Apple SD Gothic Neo", "Malgun Gothic", system-ui, -apple-system, sans-serif;
-  font-size: 16px;
-  line-height: 1.7;
+  background: #edf0f4;
+  color: #1f2937;
+  font-size: 15px;
+  line-height: 1.6;
   word-break: keep-all;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -21,7 +31,32 @@ details > summary::-webkit-details-marker {
   display: none;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+.print-only {
+  display: none;
+}
+
+/* ---------- 인쇄: 결과서 형태 ---------- */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+  body {
+    background: #fff;
+    font-size: 10.5pt;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-avoid-break {
+    break-inside: avoid;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    box-shadow: none !important;
+  }
 }

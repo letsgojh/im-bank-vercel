@@ -137,7 +137,8 @@ function parseSummary(body: string): { fields: SummaryField[]; overview: string[
       .flatMap((b) => b[1].split(/\s+\/\s+/))
       .map((seg) => clean(seg).match(/^([^:：]+)[:：]\s*(.+)$/))
       .filter((m): m is RegExpMatchArray => m !== null);
-    const rest = clean(line.replace(/\*\*(.+?)\*\*/g, ""));
+    // "라벨: 값"이 든 굵은 글씨만 지우고, 문장 속 강조(**매우 높음** 등)는 글자를 살린다.
+    const rest = clean(line.replace(/\*\*(.+?)\*\*/g, (m, inner: string) => (/[:：]/.test(inner) ? "" : inner)));
     if (pairs.length) {
       for (const p of pairs) fields.push({ label: p[1].trim(), value: p[2].trim() });
       if (rest) fields[fields.length - 1].detail = rest;

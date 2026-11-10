@@ -1,18 +1,19 @@
 import type { Grade, GradeLevel } from "@/lib/analysis-types";
 
-export const GRADE_STYLE: Record<GradeLevel, { badge: string; accent: string; soft: string }> = {
-  critical: { badge: "bg-red-600 text-white", accent: "border-red-500", soft: "bg-red-50" },
-  high: { badge: "bg-orange-500 text-white", accent: "border-orange-500", soft: "bg-orange-50" },
-  medium: { badge: "bg-yellow-400 text-yellow-950", accent: "border-yellow-400", soft: "bg-yellow-50" },
-  low: { badge: "bg-green-600 text-white", accent: "border-green-600", soft: "bg-green-50" },
-  undetermined: { badge: "bg-gray-400 text-white", accent: "border-gray-400", soft: "bg-gray-50" },
+/** 등급 색: 작은 배지·왼쪽 선에만 쓰고 배경은 칠하지 않는다. */
+export const GRADE_STYLE: Record<GradeLevel, { badge: string; bar: string; dot: string; text: string }> = {
+  critical: { badge: "bg-red-700 text-white", bar: "border-l-red-700", dot: "bg-red-700", text: "text-red-800" },
+  high: { badge: "bg-orange-600 text-white", bar: "border-l-orange-600", dot: "bg-orange-600", text: "text-orange-800" },
+  medium: { badge: "bg-amber-400 text-amber-950", bar: "border-l-amber-400", dot: "bg-amber-400", text: "text-amber-800" },
+  low: { badge: "bg-emerald-700 text-white", bar: "border-l-emerald-700", dot: "bg-emerald-700", text: "text-emerald-800" },
+  undetermined: { badge: "bg-slate-500 text-white", bar: "border-l-slate-400", dot: "bg-slate-400", text: "text-slate-700" },
 };
 
-export function GradeBadge({ grade, size = "md" }: { grade: Grade | null; size?: "md" | "lg" }) {
-  const g = grade ?? { label: "확인 불가", level: "undetermined" as const };
-  const pad = size === "lg" ? "px-4 py-1.5 text-xl sm:text-2xl" : "px-3 py-1 text-sm";
+export function GradeBadge({ grade, size = "md" }: { grade: Grade | null; size?: "sm" | "md" | "lg" }) {
+  const g = grade ?? { label: "판정 없음", level: "undetermined" as const };
+  const pad = size === "lg" ? "px-3 py-1 text-lg" : size === "sm" ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-[13px]";
   return (
-    <span className={`inline-flex shrink-0 items-center rounded-full font-semibold ${pad} ${GRADE_STYLE[g.level].badge}`}>
+    <span className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-[3px] font-bold leading-tight ${pad} ${GRADE_STYLE[g.level].badge}`}>
       {g.label}
     </span>
   );

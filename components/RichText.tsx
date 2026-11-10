@@ -10,7 +10,7 @@ function Inline({ text }: { text: string }) {
     <>
       {parts.map((p, i) =>
         p.startsWith("**") && p.endsWith("**") ? (
-          <strong key={i} className="font-semibold text-gray-900">
+          <strong key={i} className="font-semibold text-slate-900">
             {p.slice(2, -2)}
           </strong>
         ) : (
@@ -61,11 +61,11 @@ function toBlocks(src: string): Block[] {
 
 export function RichText({ text }: { text: string }) {
   return (
-    <div className="space-y-3 text-[15px] leading-7 text-gray-800 sm:text-base">
+    <div className="space-y-2.5 text-[14px] leading-7 text-slate-800">
       {toBlocks(text).map((b, i) => {
         if (b.kind === "heading")
           return (
-            <h4 key={i} className="pt-2 text-base font-bold text-gray-900 sm:text-lg">
+            <h4 key={i} className="pt-1 text-[15px] font-bold text-slate-900">
               <Inline text={b.text.replace(/\*\*/g, "")} />
             </h4>
           );
@@ -81,9 +81,9 @@ export function RichText({ text }: { text: string }) {
           );
         if (b.kind === "table")
           return (
-            <div key={i} className="overflow-x-auto rounded-xl ring-1 ring-gray-200">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead className="bg-gray-50">
+            <div key={i} className="overflow-x-auto border border-slate-300 print:overflow-visible">
+              <table className="w-full min-w-[640px] text-left text-sm print:min-w-0">
+                <thead className="bg-slate-100">
                   <tr>
                     {b.head.map((h, k) => (
                       <th key={k} className="whitespace-nowrap px-3 py-2.5 font-semibold text-gray-700">

@@ -1,25 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
 
-const notoSansKr = Noto_Sans_KR({
-  weight: ["400", "500", "600", "700", "800"],
-  subsets: ["latin"],
-  display: "swap",
-  preload: false,
-  variable: "--font-sans-kr",
-});
-
 export const metadata: Metadata = {
-  title: "서류 위험도 점검",
-  description: "전세대출 병합 PDF의 개인정보 위험도 등급을 확인합니다.",
+  title: "서류 개인정보 점검 시스템",
+  description: "전세자금대출 제출서류(병합 PDF)의 개인정보 노출 위험도를 점검합니다.",
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ko" className={notoSansKr.variable}>
+    <html lang="ko">
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+        />
+      </head>
       <body className="min-h-screen">{children}</body>
     </html>
   );
