@@ -32,6 +32,9 @@ export interface UpstageOutputItem {
   /** "document-parse" | "document-classify" | "information-extract" | "merge" | "instruct" */
   step_type?: string | null;
   content: UpstageContent[];
+  /** 단계 시작/종료 시각 (Unix 초) */
+  created_at?: number;
+  updated_at?: number;
 }
 
 /** POST /v2/responses, GET /v2/responses/{id} 응답 */

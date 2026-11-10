@@ -125,7 +125,8 @@ export default function Page() {
 
       if (data.status === "failed") return setView({ kind: "error", phase, message: data.error?.message ?? ERROR_MESSAGES.JOB_FAILED });
       if (data.status === "completed") {
-        setMeta((m) => ({ ...m, completedAt: fmtDateTime(new Date()) }));
+        const totalSeconds = Math.round((Date.now() - startedAt.current) / 1000);
+        setMeta((m) => ({ ...m, completedAt: fmtDateTime(new Date()), totalSeconds, analysisSeconds: data.analysisSeconds }));
         if (data.error) return setView({ kind: "error", phase: "completed", message: data.error.message, data });
         return setView({ kind: "done", data });
       }

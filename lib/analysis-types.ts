@@ -110,5 +110,7 @@ export interface StatusResponse {
   result?: AnalysisResult;
   /** "원본 JSON 보기"용. 원값·좌표를 제거한 단계별 결과 */
   raw?: unknown;
+  /** Upstage 분석 시간(초): Job 생성 ~ 마지막 단계 종료. 데모 모드에서는 없음 */
+  analysisSeconds?: number;
   error?: { code: ErrorCode; message: string };
 }

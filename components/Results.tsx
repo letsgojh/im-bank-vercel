@@ -12,8 +12,18 @@ export interface ResultMeta {
   fileSize?: number;
   requestedAt?: string;
   completedAt?: string;
+  /** Upstage 분석 시간(초) */
+  analysisSeconds?: number;
+  /** 점검 요청 ~ 결과 표시(초) */
+  totalSeconds?: number;
   demo?: boolean;
 }
+
+export const fmtDuration = (sec: number) => {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return m > 0 ? `${m}분 ${s}초` : `${s}초`;
+};
 
 const GRADE_ORDER: GradeLevel[] = ["critical", "high", "medium", "low", "undetermined"];
 
@@ -104,6 +114,23 @@ function SummaryPanel({ result, meta }: { result: AnalysisResult; meta: ResultMe
             <span className="tabular-nums">
               {meta.requestedAt}
               {meta.completedAt && <> ~ {meta.completedAt}</>}
+            </span>
+          </KV>
+        )}
+        {(meta.analysisSeconds != null || meta.totalSeconds != null) && (
+          <KV label="수행 시간">
+            <span className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 tabular-nums">
+              {meta.analysisSeconds != null && (
+                <span>
+                  분석 <strong>{fmtDuration(meta.analysisSeconds)}</strong>
+                </span>
+              )}
+              {meta.totalSeconds != null && (
+                <span className="text-[13px] text-slate-600">
+                  요청~결과 표시 {fmtDuration(meta.totalSeconds)}
+                  {meta.demo && " (시연 데이터)"}
+                </span>
+              )}
             </span>
           </KV>
         )}
