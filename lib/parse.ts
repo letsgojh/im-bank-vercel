@@ -347,6 +347,50 @@ function fromJson(obj: Record<string, unknown>, baseDocs: BaseDoc[], result: Ana
   result.documents = docs;
 }
 
+// ---------- 등급산정 단계가 decision JSON으로 올 때 (config 33) ----------
+// { decision, known_risk_grade, reasons[], review_reasons[],
+//   document_results: [{ document_type, decision, known_risk_grade, reasons[], review_reasons[] }] }
+
+const strList = (v: unknown) =>
+  (Array.isArray(v) ? v : []).filter((x): x is string => typeof x === "string").map(clean).filter(Boolean);
+
+function fromDecisionJson(obj: Record<string, unknown>, baseDocs: BaseDoc[], result: AnalysisResult) {
+  result.fileGrade = gradeOf(obj.decision);
+  const known = gradeOf(obj.known_risk_grade);
+  if (known && known.label !== result.fileGrade?.label) result.fileKnownMaxGrade = known;
+  result.overview = strList(obj.reasons);
+  result.notes = strList(obj.review_reasons);
+
+  const used = new Set<BaseDoc>();
+  const docs: DocumentResult[] = [];
+  for (const d of Array.isArray(obj.document_results) ? obj.document_results : []) {
+    const r = asObject<Record<string, unknown>>(d);
+    if (!r) continue;
+    const name = str(r.document_type) ?? "";
+    const b = baseDocs.find((x) => !used.has(x) && (sameDocument(name, x.classLabel) || sameDocument(name, x.title)));
+    if (b) used.add(b);
+    const grade = gradeOf(r.decision);
+    const knownDoc = gradeOf(r.known_risk_grade);
+    const items = b?.items ?? [];
+    docs.push({
+      name: name || b?.title || "",
+      grade,
+      gradeSource: "response",
+      knownMaxGrade: knownDoc && knownDoc.label !== grade?.label ? knownDoc : undefined,
+      readStatus: b?.readStatus,
+      pages: b?.pages,
+      reasons: strList(r.reasons),
+      reviewReasons: strList(r.review_reasons),
+      judgments: [],
+      items,
+      undeterminedItems: items.filter(isUndeterminedItem),
+    });
+  }
+  const level = (d: DocumentResult) =>
+    d.grade && d.grade.level !== "undetermined" ? GRADE_RANK[d.grade.level] : GRADE_RANK[d.knownMaxGrade?.level ?? "undetermined"] - 0.5;
+  result.documents = docs.sort((a, b) => level(b) - level(a));
+}
+
 // ---------- 메인 ----------
 
 export function parseJob(job: UpstageJob): AnalysisResult {
@@ -372,6 +416,11 @@ export function parseJob(job: UpstageJob): AnalysisResult {
   const additional = asObject<InstructAdditional>(parseMaybeJson(firstAdditional(grading))) ?? {};
 
   const asJson = asObject<Record<string, unknown>>(parsed);
+  if (asJson && (Array.isArray(asJson.document_results) || "decision" in asJson)) {
+    fromDecisionJson(asJson, baseDocs, result);
+    result.fileGrade ??= toGrade(additional.enum);
+    return result;
+  }
   if (asJson && (Array.isArray(asJson.documents) || "file_grade" in asJson)) {
     fromJson(asJson, baseDocs, result);
     result.fileGrade ??= toGrade(additional.enum);

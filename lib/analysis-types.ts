@@ -46,6 +46,12 @@ export interface DocumentResult {
   readStatus?: string;
   reason?: string;
   pages?: string;
+  /** 판정이 확정되지 않았을 때 확인된 최소 등급 (known_risk_grade) */
+  knownMaxGrade?: Grade | null;
+  /** 문서 판정 근거 문장들 (등급 없음) */
+  reasons?: string[];
+  /** 추가 확인이 필요한 사유 */
+  reviewReasons?: string[];
   /** 세부 항목 판정 (위험도 높은 순) */
   judgments: Judgment[];
   /** 항목 추출 단계가 찾은 개별 민감정보 (등급 없음) */
@@ -62,6 +68,8 @@ export interface SummaryField {
 
 export interface AnalysisResult {
   fileGrade: Grade | null;
+  /** 파일 판정이 확정되지 않았을 때 확인된 최소 등급 */
+  fileKnownMaxGrade?: Grade | null;
   summary: SummaryField[];
   /** ① 절의 설명 문단 */
   overview?: string[];

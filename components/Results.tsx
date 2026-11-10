@@ -18,14 +18,24 @@ export function ConclusionCard({ result }: { result: AnalysisResult }) {
   const g = result.fileGrade;
   const level = g?.level ?? "undetermined";
   const undetermined = level === "undetermined";
+  const known = result.fileKnownMaxGrade;
   return (
     <section className={`${card} overflow-hidden`}>
-      <div className={`${GRADE_STYLE[level].soft} border-b border-gray-100 px-5 py-6 sm:px-8 sm:py-8`}>
-        <p className="text-sm font-semibold tracking-wide text-gray-500">분석 결론</p>
+      <div className={`${GRADE_STYLE[undetermined && known ? known.level : level].soft} border-b border-gray-100 px-5 py-6 sm:px-8 sm:py-8`}>
+        <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-gray-500">
+          분석 결론 {undetermined && g && <GradeBadge grade={g} />}
+        </p>
         {undetermined ? (
-          <p className="mt-3 text-xl font-bold leading-snug text-gray-900 sm:text-2xl">
-            일부 항목을 판단하지 못해 등급을 확정하지 못했습니다.
-          </p>
+          <div className="mt-3 space-y-2">
+            <p className="text-xl font-bold leading-snug text-gray-900 sm:text-2xl">일부 항목을 판단하지 못해 등급을 확정하지 못했습니다.</p>
+            {known && (
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xl font-bold leading-snug text-gray-900 sm:text-2xl">
+                <span>확인된 최소 등급은</span>
+                <GradeBadge grade={known} size="lg" />
+                <span>입니다.</span>
+              </p>
+            )}
+          </div>
         ) : (
           <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-2xl font-bold leading-snug text-gray-900 sm:text-[28px]">
             <span>이 파일의 위험도 등급은</span>
@@ -192,7 +202,27 @@ export function DocumentCard({ doc, index }: { doc: DocumentResult; index: numbe
           <p>
             {doc.name}의 위험도 등급은 <strong className="font-bold text-gray-900">{doc.grade?.label ?? "판정 없음"}</strong>입니다.
           </p>
+          {doc.knownMaxGrade && (
+            <p className="flex flex-wrap items-center gap-2 text-gray-700">
+              확인된 최소 등급 <GradeBadge grade={doc.knownMaxGrade} />
+            </p>
+          )}
           {!multi && doc.reason && <p className="text-gray-700">{doc.reason}</p>}
+          {doc.reasons && doc.reasons.length > 0 && (
+            <ul className="list-disc space-y-1.5 pl-5 text-[15px] leading-7 text-gray-700 marker:text-gray-400">
+              {doc.reasons.map((r, k) => (
+                <li key={k}>{r}</li>
+              ))}
+            </ul>
+          )}
+          {doc.reviewReasons && doc.reviewReasons.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[15px] leading-7 text-amber-950">
+              <p className="font-semibold text-amber-900">추가 확인 필요</p>
+              {doc.reviewReasons.map((r, k) => (
+                <p key={k}>{r}</p>
+              ))}
+            </div>
+          )}
           {multi && top && (
             <p className="text-gray-700">
               가장 높게 판정된 항목은 <strong className="font-semibold text-gray-900">{top.item}</strong>({top.grade?.label ?? "—"})입니다.
@@ -217,20 +247,30 @@ export function DocumentCard({ doc, index }: { doc: DocumentResult; index: numbe
             </div>
           )}
         </div>
-        <p className="mt-3 text-sm font-semibold text-blue-700 group-open:hidden">세부 항목 판정 보기 ▾</p>
+        <p className="mt-3 text-sm font-semibold text-blue-700 group-open:hidden">{doc.judgments.length > 0 ? "세부 항목 판정 보기 ▾" : "탐지된 민감정보 보기 ▾"}</p>
       </summary>
 
       <div className="space-y-5 border-t border-gray-100 px-5 pb-6 pt-5 sm:px-6">
-        <div>
-          <h4 className="mb-2 text-base font-bold text-gray-900">세부 항목별 판정</h4>
-          {doc.judgments.length > 0 ? (
+        {doc.judgments.length > 0 && (
+          <div>
+            <h4 className="mb-2 text-base font-bold text-gray-900">세부 항목별 판정</h4>
             <JudgmentList judgments={doc.judgments} />
-          ) : (
-            <p className="text-[15px] text-gray-500">응답에 이 문서의 판정이 없습니다.</p>
-          )}
-        </div>
+          </div>
+        )}
 
-        {doc.items.length > 0 && (
+        {doc.judgments.length === 0 && (
+          <div>
+            <h4 className="text-base font-bold text-gray-900">탐지된 민감정보 {doc.items.length}건</h4>
+            <p className="mb-2 mt-0.5 text-sm text-gray-500">이 분석 결과에는 항목별 등급이 없어 노출 상태만 표시합니다.</p>
+            {doc.items.length > 0 ? (
+              <FindingsTable items={doc.items} />
+            ) : (
+              <p className="text-[15px] text-gray-500">응답에 이 문서의 항목 정보가 없습니다.</p>
+            )}
+          </div>
+        )}
+
+        {doc.judgments.length > 0 && doc.items.length > 0 && (
           <details className="group/f">
             <summary className="cursor-pointer text-sm font-semibold text-blue-700">
               추출된 개별 민감정보 {doc.items.length}건 보기 <span className="text-gray-500">(등급 없음)</span>

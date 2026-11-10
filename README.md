@@ -69,5 +69,6 @@ mock/response.json       실제 completed 응답 (include[]=all, 개인정보는
 
 - 등급 문구(낮음/보통/높음/매우 높음 등)는 응답 그대로 표시하고 색상만 매핑한다. 다시 계산하지 않는다.
 - `observed_value`, `evidence_excerpt` 및 문서별 원값 필드는 서버에서 제거하고 브라우저로 보내지 않는다. 응답에 `masked_value`가 오면 그 열만 표시한다.
+- config 33은 등급산정 단계가 `{decision, known_risk_grade, reasons[], review_reasons[], document_results[]}` JSON으로 온다. `decision`이 "검토 필요"면 등급 미확정으로 보고 `known_risk_grade`를 "확인된 최소 등급"으로 표시한다. 이 형식에는 항목별 등급이 없어 문서별 근거 문장과 추출 항목(노출 상태)만 보여준다.
 - 등급산정 단계가 JSON(계획서 [예상 구조]: `file_grade`, `documents[].items[]`)으로 오면 그 값을 그대로 쓴다.
 - 등급산정 단계를 찾지 못하거나 해석하지 못하면 "응답 파싱 실패" 안내와 함께 원문을 보여준다.
