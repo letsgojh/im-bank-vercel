@@ -20,7 +20,7 @@ DEMO_MODE=true npm run dev   # 또는 .env.local에서 DEMO_MODE=true
 
 ## 배포 (무료)
 
-환경변수는 레포에 넣지 않고 각 대시보드에 입력한다: `UPSTAGE_API_KEY`, `UPSTAGE_PROJECT_ID`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID`(7), `DEMO_MODE`(false), `APP_PASSWORD`(선택).
+환경변수는 레포에 넣지 않고 각 대시보드에 입력한다: `UPSTAGE_API_KEY`, `UPSTAGE_PROJECT_ID`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID`(33), `DEMO_MODE`(false), `APP_PASSWORD`(선택).
 
 **Vercel (Hobby)** — 잠들지 않음. 업로드는 4MB까지(Vercel 요청 본문 4.5MB 제한).
 1. vercel.com → Add New → Project → GitHub 레포 선택 (Framework: Next.js 자동 인식)
@@ -55,16 +55,19 @@ mock/response.json       실제 completed 응답 (include[]=all, 개인정보는
 
 ## 응답 해석 (실제 응답 기준)
 
-config 7 워크플로우의 결과는 단계별로 `output[]`에 담겨 오고 `output_text`는 비어 있다. 그래서 조회는 `?include[]=all`로 한다.
+워크플로우 결과는 단계별로 `output[]`에 담겨 오고 `output_text`는 비어 있다. 그래서 조회는 `?include[]=all`로 한다.
 
 | 화면 | 응답 위치 |
 |---|---|
 | 파일 등급 | `Instruct - 위험등급산정` 단계 `additional_values.enum` (없으면 본문 "전체 확인 위험등급") |
 | 결론 요약, 추가 확인 사항 | 같은 단계 `text`(마크다운)의 ①, ③ 절 |
-| 문서별 등급·근거 | 같은 단계 ② 절 표 (문서 / 탐지 항목 / 원본 노출 상태 / 위험등급 / 판독 상태 / 페이지 / 근거) |
-| 문서별 항목 표, 페이지 | `Information Extract - *` 단계 `sensitive_findings[]`, `additional_values.page_ranges` |
+| 문서 목록(묶는 기준) | `document-classify` 단계 + `Information Extract - *` 단계(문서 제목, `additional_values.page_ranges`) |
+| 세부 항목별 판정 | 등급산정 ② 절 표의 각 줄을 문서명으로 해당 문서에 묶음 (실행마다 문서당 1줄일 때도, 항목 묶음당 여러 줄일 때도 있음) |
+| 문서 등급 | 그 문서의 판정이 1줄이면 그 등급, 여러 줄이면 그중 최고 등급(화면에 "세부 판정 중 최고 등급" 표시) |
+| 추출된 개별 민감정보(등급 없음) | `Information Extract - *` 단계 `sensitive_findings[]` |
 | 안내문 초안 | 마지막 instruct 단계(`Instruct - 높음_초안`) |
 
 - 등급 문구(낮음/보통/높음/매우 높음 등)는 응답 그대로 표시하고 색상만 매핑한다. 다시 계산하지 않는다.
 - `observed_value`, `evidence_excerpt` 및 문서별 원값 필드는 서버에서 제거하고 브라우저로 보내지 않는다. 응답에 `masked_value`가 오면 그 열만 표시한다.
+- 등급산정 단계가 JSON(계획서 [예상 구조]: `file_grade`, `documents[].items[]`)으로 오면 그 값을 그대로 쓴다.
 - 등급산정 단계를 찾지 못하거나 해석하지 못하면 "응답 파싱 실패" 안내와 함께 원문을 보여준다.

@@ -19,15 +19,36 @@ export interface FindingItem {
   source_locator: string;
 }
 
-export interface DocumentResult {
-  /** 등급산정 표의 "문서" 칸 */
-  name: string;
+/** 세부 항목 판정 — 등급산정 결과의 한 줄(또는 JSON items[] 하나) */
+export interface Judgment {
+  /** 탐지 항목 (예: "임차인 성명·주민등록번호·전화번호·주소") */
+  item: string;
   grade: Grade | null;
-  /** 표의 나머지 칸: 머리글 → 값 (탐지 항목, 원본 노출 상태, 판독 상태, 페이지/기재란, 짧은 판단 근거 등) */
-  fields: { label: string; value: string }[];
+  masked_value?: string;
+  exposure?: string;
+  readStatus?: string;
+  /** 페이지/기재란 */
+  location?: string;
+  reason?: string;
+}
+
+/** PDF 안의 문서 하나 (워크플로우의 문서 분류 기준) */
+export interface DocumentResult {
+  name: string;
+  /** 워크플로우 문서 분류 결과 (예: "임대차계약서") */
+  classLabel?: string;
+  grade: Grade | null;
+  /**
+   * response: 응답에 문서 등급이 한 개로 적혀 있음
+   * highest-item: 응답이 문서 안 항목별로만 판정해서, 그 판정 중 가장 높은 등급을 문서 등급으로 표시
+   */
+  gradeSource: "response" | "highest-item";
   readStatus?: string;
   reason?: string;
   pages?: string;
+  /** 세부 항목 판정 (위험도 높은 순) */
+  judgments: Judgment[];
+  /** 항목 추출 단계가 찾은 개별 민감정보 (등급 없음) */
   items: FindingItem[];
   /** exposure_status가 "판독 불가"인 항목 */
   undeterminedItems: FindingItem[];

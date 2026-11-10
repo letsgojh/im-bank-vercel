@@ -1,4 +1,4 @@
-import type { AnalysisResult, DocumentResult } from "@/lib/analysis-types";
+import type { AnalysisResult, DocumentResult, FindingItem, Grade, GradeLevel, Judgment } from "@/lib/analysis-types";
 import { GRADE_STYLE, GradeBadge } from "./GradeBadge";
 import { RichText } from "./RichText";
 
@@ -31,6 +31,11 @@ export function ConclusionCard({ result }: { result: AnalysisResult }) {
             <span>이 파일의 위험도 등급은</span>
             <GradeBadge grade={g} size="lg" />
             <span>입니다.</span>
+          </p>
+        )}
+        {result.documents.length > 0 && (
+          <p className="mt-4 flex flex-wrap items-center gap-2 text-[15px] text-gray-700">
+            문서 {result.documents.length}건 <GradeCounts grades={result.documents.map((d) => d.grade)} />
           </p>
         )}
         <p className="mt-4 inline-flex items-center gap-2 rounded-lg bg-white/80 px-3 py-2 text-[15px] font-medium text-blue-900 ring-1 ring-blue-100">
@@ -75,31 +80,130 @@ export function ConclusionCard({ result }: { result: AnalysisResult }) {
 
 // ---------------- 문서별 ----------------
 
+const GRADE_ORDER: GradeLevel[] = ["critical", "high", "medium", "low", "undetermined"];
+
+/** 등급별 개수 칩 (예: 매우 높음 2 · 높음 1) — 응답 등급을 세기만 한다 */
+function GradeCounts({ grades }: { grades: (Grade | null)[] }) {
+  const counts = new Map<string, { grade: Grade; n: number }>();
+  for (const g of grades) {
+    if (!g) continue;
+    const c = counts.get(g.label);
+    if (c) c.n += 1;
+    else counts.set(g.label, { grade: g, n: 1 });
+  }
+  const list = [...counts.values()].sort((x, y) => GRADE_ORDER.indexOf(x.grade.level) - GRADE_ORDER.indexOf(y.grade.level));
+  if (!list.length) return null;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      {list.map(({ grade, n }) => (
+        <span key={grade.label} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-sm ring-1 ring-gray-200">
+          <span className={`h-2.5 w-2.5 rounded-full ${GRADE_STYLE[grade.level].badge}`} />
+          {grade.label} <strong className="font-bold">{n}</strong>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function JudgmentList({ judgments }: { judgments: Judgment[] }) {
+  return (
+    <ol className="divide-y divide-gray-100 overflow-hidden rounded-xl ring-1 ring-gray-200">
+      {judgments.map((j, k) => (
+        <li key={k} className={`flex gap-3 px-4 py-3.5 ${j.grade ? GRADE_STYLE[j.grade.level].soft : ""}`}>
+          <div className="pt-0.5">
+            <GradeBadge grade={j.grade} />
+          </div>
+          <div className="min-w-0 flex-1 space-y-1">
+            <p className="text-base font-bold leading-7 text-gray-900">{j.item || "—"}</p>
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600">
+              {j.exposure && <ExposureTag value={j.exposure} />}
+              {j.masked_value && <span className="font-mono text-gray-700">{j.masked_value}</span>}
+              {j.location && <span>📍 {j.location}</span>}
+              {j.readStatus && !/^판독\s*가능$/.test(j.readStatus) && <span>판독: {j.readStatus}</span>}
+            </p>
+            {j.reason && <p className="text-[15px] leading-7 text-gray-700">{j.reason}</p>}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function FindingsTable({ items }: { items: FindingItem[] }) {
+  const showMasked = items.some((i) => i.masked_value);
+  return (
+    <div className="overflow-x-auto rounded-xl ring-1 ring-gray-200">
+      <table className="w-full min-w-[600px] text-left text-[15px]">
+        <thead className="bg-gray-50 text-sm text-gray-600">
+          <tr>
+            <th className="px-4 py-3 font-semibold">정보 유형</th>
+            {showMasked && <th className="px-4 py-3 font-semibold">마스킹 값</th>}
+            <th className="px-4 py-3 font-semibold">노출 상태</th>
+            <th className="px-4 py-3 font-semibold">기재 성격</th>
+            <th className="px-4 py-3 font-semibold">위치</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((i, k) => (
+            <tr key={k} className="border-t border-gray-100 align-top">
+              <td className="px-4 py-3 font-semibold text-gray-900">{i.information_type || "—"}</td>
+              {showMasked && <td className="px-4 py-3 font-mono text-gray-700">{i.masked_value || "—"}</td>}
+              <td className="px-4 py-3">
+                <ExposureTag value={i.exposure_status} />
+              </td>
+              <td className="px-4 py-3 text-gray-700">{i.usage_context || "—"}</td>
+              <td className="px-4 py-3 text-gray-500">{i.source_locator || "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function DocumentCard({ doc, index }: { doc: DocumentResult; index: number }) {
   const level = doc.grade?.level ?? "undetermined";
   const partialRead = doc.readStatus && !/^판독\s*가능$/.test(doc.readStatus);
-  const showMasked = doc.items.some((i) => i.masked_value);
+  const top = doc.judgments[0];
+  const multi = doc.judgments.length > 1;
 
   return (
     <details className={`group ${card} border-l-[6px] ${GRADE_STYLE[level].accent}`}>
       <summary className="cursor-pointer px-5 py-5 sm:px-6">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-gray-400">문서 {index + 1}</p>
+            <p className="text-xs font-semibold text-gray-400">
+              문서 {index + 1}
+              {doc.classLabel && <> · {doc.classLabel}</>}
+            </p>
             <h3 className="mt-0.5 text-lg font-bold leading-snug text-gray-900 sm:text-xl">{doc.name}</h3>
             <p className="mt-1 text-sm text-gray-500">{[doc.pages, doc.readStatus].filter(Boolean).join(" · ")}</p>
           </div>
-          <div className="flex items-center gap-2 pt-1">
-            <GradeBadge grade={doc.grade} />
-            <Chevron />
+          <div className="flex flex-col items-end gap-1 pt-1">
+            <div className="flex items-center gap-2">
+              <GradeBadge grade={doc.grade} />
+              <Chevron />
+            </div>
+            {doc.gradeSource === "highest-item" && <span className="text-xs text-gray-500">세부 판정 중 최고 등급</span>}
           </div>
         </div>
 
         <div className="mt-4 space-y-2 text-base leading-8 text-gray-800">
           <p>
-            {doc.name}의 위험도 등급은 <strong className="font-bold text-gray-900">{doc.grade?.label ?? "확인 불가"}</strong>입니다.
+            {doc.name}의 위험도 등급은 <strong className="font-bold text-gray-900">{doc.grade?.label ?? "판정 없음"}</strong>입니다.
           </p>
-          {doc.reason && <p className="text-gray-700">{doc.reason}</p>}
+          {!multi && doc.reason && <p className="text-gray-700">{doc.reason}</p>}
+          {multi && top && (
+            <p className="text-gray-700">
+              가장 높게 판정된 항목은 <strong className="font-semibold text-gray-900">{top.item}</strong>({top.grade?.label ?? "—"})입니다.
+              {top.reason && <> {top.reason}</>}
+            </p>
+          )}
+          {multi && (
+            <p className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+              세부 판정 {doc.judgments.length}건 <GradeCounts grades={doc.judgments.map((j) => j.grade)} />
+            </p>
+          )}
           {partialRead && <p className="text-[15px] text-gray-600">판독 상태: {doc.readStatus}</p>}
           {doc.undeterminedItems.length > 0 && (
             <div className="rounded-xl bg-gray-100 px-4 py-3 text-[15px] leading-7">
@@ -113,50 +217,28 @@ export function DocumentCard({ doc, index }: { doc: DocumentResult; index: numbe
             </div>
           )}
         </div>
-        <p className="mt-3 text-sm font-semibold text-blue-700 group-open:hidden">항목 자세히 보기 ▾</p>
+        <p className="mt-3 text-sm font-semibold text-blue-700 group-open:hidden">세부 항목 판정 보기 ▾</p>
       </summary>
 
       <div className="space-y-5 border-t border-gray-100 px-5 pb-6 pt-5 sm:px-6">
-        {doc.fields.length > 0 && (
-          <dl className="grid gap-3 sm:grid-cols-[minmax(120px,max-content)_1fr] sm:gap-x-6">
-            {doc.fields.map((f) => (
-              <div key={f.label} className="contents">
-                <dt className="text-sm font-semibold text-gray-500 sm:pt-0.5">{f.label}</dt>
-                <dd className="-mt-2 text-base leading-7 text-gray-900 sm:mt-0">{f.value || "—"}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
+        <div>
+          <h4 className="mb-2 text-base font-bold text-gray-900">세부 항목별 판정</h4>
+          {doc.judgments.length > 0 ? (
+            <JudgmentList judgments={doc.judgments} />
+          ) : (
+            <p className="text-[15px] text-gray-500">응답에 이 문서의 판정이 없습니다.</p>
+          )}
+        </div>
 
-        {doc.items.length > 0 ? (
-          <div className="overflow-x-auto rounded-xl ring-1 ring-gray-200">
-            <table className="w-full min-w-[600px] text-left text-[15px]">
-              <thead className="bg-gray-50 text-sm text-gray-600">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">항목</th>
-                  {showMasked && <th className="px-4 py-3 font-semibold">마스킹 값</th>}
-                  <th className="px-4 py-3 font-semibold">노출 상태</th>
-                  <th className="px-4 py-3 font-semibold">기재 성격</th>
-                  <th className="px-4 py-3 font-semibold">위치</th>
-                </tr>
-              </thead>
-              <tbody>
-                {doc.items.map((i, k) => (
-                  <tr key={k} className="border-t border-gray-100 align-top">
-                    <td className="px-4 py-3 font-semibold text-gray-900">{i.information_type || "—"}</td>
-                    {showMasked && <td className="px-4 py-3 font-mono text-gray-700">{i.masked_value || "—"}</td>}
-                    <td className="px-4 py-3">
-                      <ExposureTag value={i.exposure_status} />
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">{i.usage_context || "—"}</td>
-                    <td className="px-4 py-3 text-gray-500">{i.source_locator || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-[15px] text-gray-500">응답에 항목별 정보가 없습니다.</p>
+        {doc.items.length > 0 && (
+          <details className="group/f">
+            <summary className="cursor-pointer text-sm font-semibold text-blue-700">
+              추출된 개별 민감정보 {doc.items.length}건 보기 <span className="text-gray-500">(등급 없음)</span>
+            </summary>
+            <div className="mt-3">
+              <FindingsTable items={doc.items} />
+            </div>
+          </details>
         )}
       </div>
     </details>

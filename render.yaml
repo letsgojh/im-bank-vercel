@@ -19,7 +19,7 @@ services:
       - key: UPSTAGE_AGENT_ID
         sync: false
       - key: UPSTAGE_CONFIG_ID
-        value: "7"
+        value: "33"
       - key: DEMO_MODE
         value: "false"
       - key: APP_PASSWORD

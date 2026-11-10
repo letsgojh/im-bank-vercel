@@ -7,6 +7,7 @@ import type {
   FindingItem,
   Grade,
   GradeLevel,
+  Judgment,
   SummaryField,
 } from "./analysis-types";
 import type {
@@ -177,11 +178,14 @@ function parseNotes(body: string | undefined) {
 const norm = (s: string) => s.replace(/[^가-힣A-Za-z0-9()]/g, "");
 const base = (s: string) => norm(s).replace(/\(.*$/, "");
 
-function sameDocument(tableName: string, title: string) {
-  const a = norm(tableName);
-  const b = norm(title);
+function sameDocument(name: string, ref: string | undefined) {
+  if (!ref) return false;
+  const a = norm(name);
+  const b = norm(ref);
   if (!a || !b) return false;
-  return a === b || a.startsWith(base(b)) || b.startsWith(base(a));
+  const ba = base(a);
+  const bb = base(b);
+  return a === b || a.startsWith(bb) || b.startsWith(ba) || a.includes(bb) || b.includes(ba);
 }
 
 function pageLabel(ranges: [number, number][] | undefined) {
@@ -189,8 +193,10 @@ function pageLabel(ranges: [number, number][] | undefined) {
   return ranges.map(([s, e]) => (s === e ? `${s}` : `${s}–${e}`)).join(", ") + "쪽";
 }
 
-interface ExtractDoc {
+/** 워크플로우가 나눈 문서 하나 (문서 분류 + 항목 추출 단계 기준) */
+interface BaseDoc {
   title: string;
+  classLabel?: string;
   readStatus?: string;
   pages?: string;
   items: FindingItem[];
@@ -208,30 +214,145 @@ function toItem(f: Record<string, unknown>): FindingItem {
   };
 }
 
-function readExtracts(outputs: UpstageOutputItem[]): ExtractDoc[] {
-  return outputs
-    .filter((o) => o.step_type === "information-extract" || /^Information Extract\b/i.test(o.model))
-    .map((o) => {
-      const r = asObject<ExtractResult>(parseMaybeJson(firstText(o))) ?? {};
-      const add = asObject<ExtractAdditional>(parseMaybeJson(firstAdditional(o))) ?? {};
-      const findings = Array.isArray(r.sensitive_findings) ? r.sensitive_findings : [];
+function readBaseDocs(outputs: UpstageOutputItem[]): BaseDoc[] {
+  const labels = outputs
+    .filter((o) => o.step_type === "document-classify")
+    .flatMap((o) => (o.content ?? []).map((c) => (typeof c.text === "string" ? c.text.trim() : "")));
+  const extracts = outputs.filter((o) => o.step_type === "information-extract" || /^Information Extract\b/i.test(o.model));
+  return extracts.map((o, i) => {
+    const r = asObject<ExtractResult>(parseMaybeJson(firstText(o))) ?? {};
+    const add = asObject<ExtractAdditional>(parseMaybeJson(firstAdditional(o))) ?? {};
+    const findings = Array.isArray(r.sensitive_findings) ? r.sensitive_findings : [];
+    const title = typeof r.document_title === "string" ? r.document_title.trim() : "";
+    return {
+      title: title || labels[i] || o.model.replace(/^Information Extract\s*-\s*/, ""),
+      classLabel: labels.length === extracts.length ? labels[i] : undefined,
+      readStatus: typeof r.document_read_status === "string" ? r.document_read_status : undefined,
+      pages: pageLabel(add.page_ranges),
+      items: findings.map((f) => toItem(f as Record<string, unknown>)),
+    };
+  });
+}
+
+// ---------- 문서 조립 ----------
+
+const isUndeterminedItem = (i: FindingItem) => /판독\s*불가|판단\s*불가|미확인|미결정/.test(i.exposure_status);
+const isReadable = (s?: string) => !s || /^판독\s*가능$/.test(s.trim());
+
+function highest(judgments: Judgment[]): Grade | null {
+  let best: Grade | null = null;
+  for (const j of judgments) {
+    if (j.grade && (!best || GRADE_RANK[j.grade.level] > GRADE_RANK[best.level])) best = j.grade;
+  }
+  return best;
+}
+
+/** 판정 줄을 워크플로우 문서 단위로 묶는다. 같은 문서의 여러 줄은 한 문서의 세부 항목 판정이 된다. */
+function assemble(baseDocs: BaseDoc[], rows: { docName: string; judgment: Judgment }[]): DocumentResult[] {
+  const groups: { base?: BaseDoc; name: string; judgments: Judgment[] }[] = baseDocs.map((b) => ({
+    base: b,
+    name: b.title,
+    judgments: [],
+  }));
+  for (const row of rows) {
+    let g =
+      groups.find((x) => x.base && (sameDocument(row.docName, x.base.title) || sameDocument(row.docName, x.base.classLabel))) ??
+      groups.find((x) => !x.base && norm(x.name) === norm(row.docName));
+    if (!g) {
+      g = { name: row.docName, judgments: [] };
+      groups.push(g);
+    }
+    // 표에 적힌 문서명이 있으면 그 이름을 화면에 쓴다(첫 줄 기준).
+    if (g.judgments.length === 0 && row.docName) g.name = row.docName;
+    g.judgments.push(row.judgment);
+  }
+
+  const docs = groups
+    .filter((g) => g.judgments.length > 0 || (g.base?.items.length ?? 0) > 0)
+    .map((g): DocumentResult => {
+      const single = g.judgments.length === 1;
+      const items = g.base?.items ?? [];
+      const unreadable = g.judgments.find((j) => !isReadable(j.readStatus))?.readStatus;
       return {
-        title: typeof r.document_title === "string" ? r.document_title : o.model.replace(/^Information Extract\s*-\s*/, ""),
-        readStatus: typeof r.document_read_status === "string" ? r.document_read_status : undefined,
-        pages: pageLabel(add.page_ranges),
-        items: findings.map((f) => toItem(f as Record<string, unknown>)),
+        name: g.name,
+        classLabel: g.base?.classLabel,
+        grade: single ? g.judgments[0].grade : highest(g.judgments),
+        gradeSource: single ? "response" : "highest-item",
+        readStatus: unreadable ?? g.base?.readStatus ?? g.judgments[0]?.readStatus,
+        reason: single ? g.judgments[0].reason : undefined,
+        pages: g.base?.pages,
+        judgments: [...g.judgments].sort(
+          (a, b) => GRADE_RANK[b.grade?.level ?? "undetermined"] - GRADE_RANK[a.grade?.level ?? "undetermined"],
+        ),
+        items,
+        undeterminedItems: items.filter(isUndeterminedItem),
       };
     });
+
+  // 위험도 높은 순 (같으면 PDF 순서 유지)
+  return docs.sort((a, b) => GRADE_RANK[b.grade?.level ?? "undetermined"] - GRADE_RANK[a.grade?.level ?? "undetermined"]);
+}
+
+// ---------- 등급산정 단계가 JSON으로 올 때 (계획서 [예상 구조]) ----------
+
+const EN_LABEL: Record<string, string> = {
+  low: "낮음",
+  medium: "보통",
+  high: "높음",
+  critical: "매우 높음",
+  undetermined: "판단 불가",
+};
+const gradeOf = (v: unknown) => (typeof v === "string" ? toGrade(EN_LABEL[v.trim().toLowerCase()] ?? v) : null);
+const str = (v: unknown) => (typeof v === "string" ? v : typeof v === "number" ? String(v) : undefined);
+
+function fromJson(obj: Record<string, unknown>, baseDocs: BaseDoc[], result: AnalysisResult) {
+  result.fileGrade = gradeOf(obj.file_grade);
+  const known = gradeOf(obj.file_known_max_grade);
+  if (known && result.fileGrade?.level === "undetermined") result.summary.push({ label: "확인된 최소 등급", value: known.label });
+  if (str(obj.file_undetermined_reason)) result.summary.push({ label: "등급 미확정 사유", value: str(obj.file_undetermined_reason)! });
+
+  const rows: { docName: string; judgment: Judgment }[] = [];
+  const docGrades = new Map<string, Grade | null>();
+  for (const d of Array.isArray(obj.documents) ? obj.documents : []) {
+    const doc = asObject<Record<string, unknown>>(d);
+    if (!doc) continue;
+    const docName = str(doc.doc_type) ?? str(doc.doc_id) ?? "";
+    docGrades.set(docName, gradeOf(doc.doc_grade));
+    for (const it of Array.isArray(doc.items) ? doc.items : []) {
+      const item = asObject<Record<string, unknown>>(it);
+      if (!item) continue;
+      const page = str(asObject<Record<string, unknown>>(item.source)?.page);
+      rows.push({
+        docName,
+        judgment: {
+          item: str(item.item) ?? str(item.item_id) ?? "",
+          grade: gradeOf(item.grade),
+          masked_value: str(item.masked_value),
+          exposure: str(item.exposure_state),
+          location: page ? `${page}쪽` : undefined,
+          reason: str(item.reason),
+        },
+      });
+    }
+  }
+  const docs = assemble(baseDocs, rows);
+  // JSON에는 문서 등급이 따로 있으므로 그 값을 그대로 쓴다.
+  for (const doc of docs) {
+    const key = [...docGrades.keys()].find((k) => sameDocument(doc.name, k));
+    if (key !== undefined && docGrades.get(key)) {
+      doc.grade = docGrades.get(key)!;
+      doc.gradeSource = "response";
+    }
+  }
+  result.documents = docs;
 }
 
 // ---------- 메인 ----------
 
-const isUndeterminedItem = (i: FindingItem) => /판독\s*불가|판단\s*불가|미확인|미결정/.test(i.exposure_status);
-
 export function parseJob(job: UpstageJob): AnalysisResult {
   const outputs = Array.isArray(job.output) ? job.output : [];
   const grading = findGradingStep(outputs);
-  const extracts = readExtracts(outputs);
+  const baseDocs = readBaseDocs(outputs);
 
   const result: AnalysisResult = { fileGrade: null, summary: [], documents: [], notes: [] };
 
@@ -247,9 +368,17 @@ export function parseJob(job: UpstageJob): AnalysisResult {
 
   if (!grading) throw new Error("grading step not found");
 
-  const mdRaw = parseMaybeJson(firstText(grading));
-  const md = typeof mdRaw === "string" ? mdRaw : "";
+  const parsed = parseMaybeJson(firstText(grading));
   const additional = asObject<InstructAdditional>(parseMaybeJson(firstAdditional(grading))) ?? {};
+
+  const asJson = asObject<Record<string, unknown>>(parsed);
+  if (asJson && (Array.isArray(asJson.documents) || "file_grade" in asJson)) {
+    fromJson(asJson, baseDocs, result);
+    result.fileGrade ??= toGrade(additional.enum);
+    return result;
+  }
+
+  const md = typeof parsed === "string" ? parsed : "";
   const sections = splitSections(md);
 
   // ① 전체 결과
@@ -259,48 +388,31 @@ export function parseJob(job: UpstageJob): AnalysisResult {
   result.summary = fields.filter((f) => f !== gradeField);
   result.overview = overview;
 
-  // ② 문서별 결과 (절을 못 찾으면 본문의 첫 표)
+  // ② 문서별 결과 표 (절을 못 찾으면 본문의 첫 표). 실행마다 한 줄이 "문서 하나"일 수도,
+  //    "문서 안의 항목 묶음 하나"일 수도 있어서, 문서명으로 묶어 세부 판정으로 둔다.
   const table = parseTable(sectionBy(sections, "②", "문서") ?? "") ?? parseTable(md);
   if (table) {
     const col = (...keys: string[]) => table.headers.findIndex((h) => keys.some((k) => h.includes(k)));
+    const at = (row: string[], i: number) => (i >= 0 ? row[i] || undefined : undefined);
     const iName = col("문서");
+    const iItem = col("탐지", "항목");
+    const iExposure = col("노출");
     const iGrade = col("위험등급", "등급");
     const iRead = col("판독");
+    const iPage = col("페이지", "기재란", "위치");
     const iReason = col("근거");
-    const iPage = col("페이지");
-    const used = new Set<number>();
-
-    table.rows.forEach((row, idx) => {
-      const name = row[iName >= 0 ? iName : 0] ?? "";
-      let ex = extracts.find((e, j) => !used.has(j) && sameDocument(name, e.title));
-      let exIndex = ex ? extracts.indexOf(ex) : -1;
-      if (!ex && extracts.length === table.rows.length && !used.has(idx)) {
-        ex = extracts[idx];
-        exIndex = idx;
-      }
-      if (exIndex >= 0) used.add(exIndex);
-
-      const items = ex?.items ?? [];
-      const doc: DocumentResult = {
-        name,
-        grade: iGrade >= 0 ? toGrade(row[iGrade]) : null,
-        fields: table.headers
-          .map((label, i) => ({ label, value: row[i] ?? "" }))
-          .filter((_, i) => i !== iName && i !== iGrade && i !== iReason && i !== iRead && i !== iPage),
-        readStatus: (iRead >= 0 ? row[iRead] : undefined) || ex?.readStatus,
-        reason: iReason >= 0 ? row[iReason] : undefined,
-        pages: ex?.pages ?? (iPage >= 0 ? row[iPage] : undefined),
-        items,
-        undeterminedItems: items.filter(isUndeterminedItem),
-      };
-      if (iPage >= 0 && row[iPage]) doc.fields.push({ label: table.headers[iPage], value: row[iPage] });
-      result.documents.push(doc);
-    });
-
-    // 위험도 높은 순 (같으면 응답 순서 유지)
-    result.documents.sort(
-      (a, b) => GRADE_RANK[b.grade?.level ?? "undetermined"] - GRADE_RANK[a.grade?.level ?? "undetermined"],
-    );
+    const rows = table.rows.map((row) => ({
+      docName: row[iName >= 0 ? iName : 0] ?? "",
+      judgment: {
+        item: at(row, iItem) ?? "",
+        grade: toGrade(at(row, iGrade)),
+        exposure: at(row, iExposure),
+        readStatus: at(row, iRead),
+        location: at(row, iPage),
+        reason: at(row, iReason),
+      },
+    }));
+    result.documents = assemble(baseDocs, rows);
   }
 
   // ③ 추가 확인 사항 + 마지막 안내 문장
